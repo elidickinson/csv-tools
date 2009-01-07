@@ -1,0 +1,35 @@
+K 25
+svn:wc:ra_dav:version-url
+V 48
+/svn/projects/!svn/ver/114/trunk/csv2sqlite/test
+END
+oneliner.csv
+K 25
+svn:wc:ra_dav:version-url
+V 61
+/svn/projects/!svn/ver/113/trunk/csv2sqlite/test/oneliner.csv
+END
+test_c2s.rb
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/svn/projects/!svn/ver/113/trunk/csv2sqlite/test/test_c2s.rb
+END
+dupes.csv
+K 25
+svn:wc:ra_dav:version-url
+V 58
+/svn/projects/!svn/ver/113/trunk/csv2sqlite/test/dupes.csv
+END
+test_cleaner.rb
+K 25
+svn:wc:ra_dav:version-url
+V 64
+/svn/projects/!svn/ver/123/trunk/csv2sqlite/test/test_cleaner.rb
+END
+broken1.csv
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/svn/projects/!svn/ver/114/trunk/csv2sqlite/test/broken1.csv
+END
