@@ -34,7 +34,7 @@ class Csv2Sqlite
       # }
       # insertstr += cols.
       # cols.each { |c| }
-      p insertstr
+      # p insertstr
       @DB.execute(insertstr, *row)
     end
     # db.execute(".import #{table} #{tablename}")
@@ -52,4 +52,5 @@ if __FILE__ == $0
     raise "Input file '#{fname}' does not exist" if !File.exist?(fname)
     c2s.add_csv(fname)
   end
+  exec "sqlite3 csv.db"
 end
