@@ -1,20 +1,17 @@
+#!/usr/bin/env python
 import csv, sys, getopt
+"""---------------------------------------------
+USAGE: csv2sqlite.py input [options] [source file]
+	-v, --verbose	Verbose mode. Prints to stdout.
+"""
 
 def printUsage():
-	print """---------------------------------------------
-USAGE: csv2sqlite.py input [output] [tableName]
-
-If output is not specified or is '-', sql statements will be sent to stdout."
-
-If tableName is not specified, the table name will be automatically generated
-from input filename or output filename.
-
-	'contacts.sql' --> tablename = 'contacts'."""
+	print 
 
 def printVerbose(msg):
 	global verboseMode
 	if verboseMode:
-		print msg
+		print "-- " + str(msg)
 
 
 def main(argv):
@@ -68,7 +65,7 @@ def main(argv):
 	
 	c = csv.reader(input, dialect)
 	header = c.next()
-	printVerbose(header)
+	printVerbose("Header row: %s" % header)
 	input.close()
 	return 0
 
