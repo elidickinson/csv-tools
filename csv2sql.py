@@ -34,14 +34,13 @@ def createTable(header):
 		else:
 			collation = ""
 		fieldDefs.append("`%s` TEXT %s" % (fieldName, collation))
-	print fieldDefs
 	retval += ",\n".join(fieldDefs) # string.join(fieldDefs, ",")
 	retval += "\n);\n\n"
 	return retval
 
 def insertRow(row):
 	global tableName
-	row = ["`"+x+"`" for x in row]
+	row = ["'%s'" % x.replace("'","''") for x in row]
 	values = ",".join(row)
 	retval = "INSERT INTO `%s` VALUES (%s);" % (tableName,values)
 	return retval
@@ -73,7 +72,7 @@ def main(argv):
 		elif opt in ("-k", "--key"):
 			keyField = arg
 	
-	print args
+	# print args
 	if len(args) != 1:
 		printUsage()
 		return 1
