@@ -1,13 +1,16 @@
 #!/usr/bin/env python
 """---------------------------------------------
 USAGE: csv2sqlite.py input [options] [source file]
-	-v, --verbose	Verbose mode. Prints to stdout.
+	-v, --verbose	Verbose mode. Adds extra comments to SQL
 """
 
-import csv, sys, getopt, re, os, string
+__author__ = "Eli Dickinson (eli-at-elidickinson-com)"
+__version__ = "0.1"
+
+import csv, sys, getopt, re, os, string, time
 
 def printUsage():
-	print __doc__
+	printError(__doc__)
 
 def printVerbose(msg):
 	global verboseMode
@@ -22,18 +25,23 @@ def printError(message):
 
 
 def createTable(header):
-	global tableName
+	global tableName, verboseMode, keyField
+	fieldNames = [] # not yet used
 	retval = "\nDROP TABLE IF EXISTS `%s`;" % tableName
-	retval += "\n-- HEADER ROW\n-- %s" % "//".join(header)
 	retval += "\nCREATE TABLE `%s` (\n" % tableName
 	fieldDefs = []
 	for field in header:
 		fieldName = re.sub("[^a-zA-Z0-9_]+","_",field).strip("_").lower()
-		if fieldName == 'email':
+		fieldNames.append(fieldName)
+		if fieldName == 'email': # special case hack
 			collation = "COLLATE NOCASE"
 		else:
 			collation = ""
-		fieldDefs.append("`%s` TEXT %s" % (fieldName, collation))
+		if keyField and keyField == fieldName:
+			keyOptions = "PRIMARY KEY"
+		else:
+			keyOptions = ""
+		fieldDefs.append("`%s` TEXT %s %s" % (fieldName, collation, keyOptions))
 	retval += ",\n".join(fieldDefs) # string.join(fieldDefs, ",")
 	retval += "\n);\n\n"
 	return retval
@@ -48,14 +56,17 @@ def insertRow(row):
 def main(argv):
 	global tableName, verboseMode, keyField
 	tableName = None
-	keyField = None
-	verboseMode = False
+	keyField = None # TODO: allow numeric value to specify column by number
+	verboseMode = True # default on
+	header = None
+	skipRows = 0
+	ignoreColumns = None
 
 	try:
-		opts, args = getopt.getopt(argv, "h:t:k:v",  \
-			["help", "verbose", "header=", "tablename=", "output=", "key="])
+		opts, args = getopt.getopt(argv, "h:t:k:vq",  \
+			["help", "verbose", "quiet", "header=", "tablename=", "output=", "key=", "skip=", "ignore="])
 	except getopt.GetoptError:
-		print "Invalid argument error"
+		printError("Invalid argument error")
 		printUsage()
 		sys.exit(2)
 	
@@ -69,22 +80,32 @@ def main(argv):
 			tableName = arg
 		elif opt in ("-v", "--verbose"):
 			verboseMode = True
+		elif opt in ("-q", "--quiet"):
+			verboseMode = False
 		elif opt in ("-k", "--key"):
 			keyField = arg
+		elif opt in ("--skip"):
+			skipRows = int(arg)
+		elif opt in ("--ignore"):
+			ignoreColumns = arg.split(",")
 	
 	# print args
 	if len(args) != 1:
 		printUsage()
 		return 1
 	input_filename = args[0]
-
+	
+	printVerbose("csv2sql.py - Version %s - Run date: %s" % (__version__, time.ctime()) )
+	printVerbose("Source file: %s - %d bytes - Stamped %s" % (os.path.basename(input_filename), os.path.getsize(input_filename), time.ctime(os.path.getmtime(input_filename))) )
+	printVerbose("Skipping %d row(s)" % skipRows)
+	
 	input = file(input_filename,'r')
 	if tableName == None:
 		tableName = os.path.basename(input_filename)
 		tableName = tableName.lower()
 		tableName = re.sub('\..*$','',tableName)
 		tableName = re.sub('[^a-z0-9_]+','_',tableName)
-
+	
 	# sniff dialect of csv 
 	input_chunk = input.read(1024)
 	try:
@@ -104,8 +125,11 @@ def main(argv):
 	input.seek(0)
 	#c = csv.DictReader(input,dialect = dialect)
 	c = csv.reader(input,dialect = dialect)
-	header = c.next()
-	printVerbose("Header row: %s" % header)
+	if header == None:
+		header = c.next()
+	for i in range(skipRows):
+		c.next()
+	printVerbose("Using header row: %s" % header)
 	print createTable(header)
 	for row in c:
 		print insertRow(row)
