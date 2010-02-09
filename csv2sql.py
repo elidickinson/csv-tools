@@ -131,8 +131,10 @@ def main(argv):
 		c.next()
 	printVerbose("Using header row: %s" % header)
 	print createTable(header)
+	print "\nbegin;\n"
 	for row in c:
 		print insertRow(row)
+	print "\ncommit;\n"
 	input.close()
 	return 0
 
