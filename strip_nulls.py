@@ -6,7 +6,7 @@ def main(argv):
 		while data != "":
 			sys.stdout.write(data.replace("\0",""))
 			data = f.read(4096)
-	
+
 
 if __name__ == "__main__":
 	sys.exit(main(sys.argv[1:])) # slice this filename off args

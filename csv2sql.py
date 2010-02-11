@@ -61,10 +61,11 @@ def main(argv):
 	header = None
 	skipRows = 0
 	ignoreColumns = None
+	tableExists = False
 
 	try:
 		opts, args = getopt.getopt(argv, "h:t:k:vq",  \
-			["help", "verbose", "quiet", "header=", "tablename=", "output=", "key=", "skip=", "ignore="])
+			["help", "verbose", "quiet", "header=", "tablename=", "output=", "key=", "skip=", "ignore=", "tableexists"])
 	except getopt.GetoptError:
 		printError("Invalid argument error")
 		printUsage()
@@ -88,7 +89,9 @@ def main(argv):
 			skipRows = int(arg)
 		elif opt in ("--ignore"):
 			ignoreColumns = arg.split(",")
-	
+		elif opt in ("--tableexists"):
+			tableExists = True
+
 	# print args
 	if len(args) != 1:
 		printUsage()
@@ -96,7 +99,8 @@ def main(argv):
 	input_filename = args[0]
 	
 	printVerbose("csv2sql.py - Version %s - Run date: %s" % (__version__, time.ctime()) )
-	printVerbose("Source file: %s - %d bytes - Stamped %s" % (os.path.basename(input_filename), os.path.getsize(input_filename), time.ctime(os.path.getmtime(input_filename))) )
+	printVerbose("Source file: %s - %d bytes - Stamped %s" \
+		% (os.path.basename(input_filename), os.path.getsize(input_filename), time.ctime(os.path.getmtime(input_filename))) )
 	printVerbose("Skipping %d row(s)" % skipRows)
 	
 	input = file(input_filename,'r')
@@ -119,7 +123,7 @@ def main(argv):
 			printVerbose("Guessing Excel CSV")
 		elif(tabs > commas):
 			dialect = "excel-tab"
-			printVerbose("Guess Excel TSV")
+			printVerbose("Guessing Excel TSV")
 
 	# reset input file back to beginning
 	input.seek(0)
@@ -130,7 +134,8 @@ def main(argv):
 	for i in range(skipRows):
 		c.next()
 	printVerbose("Using header row: %s" % header)
-	print createTable(header)
+	if not tableExists:
+		print createTable(header)
 	print "\nbegin;\n"
 	for row in c:
 		print insertRow(row)
