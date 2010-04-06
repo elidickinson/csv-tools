@@ -1,13 +1,25 @@
 #!/usr/bin/env python
 """---------------------------------------------
-USAGE: csv2sqlite.py input [options] [source file]
+USAGE: csv2sql.py [options] input.csv
 	-v, --verbose	Verbose mode. Adds extra comments to SQL
+	-q, --quiet		Disable verbose mode. Fewer comments in SQL
+	-t <name>, --table-name=<name>	Use given name for table in
+		SQL (otherwise it's generated from the input file name)
+	--ignore=	Ignore the comma separated list of columns
+	--skip=n	Skip given number of lines at start of file
+		(after reading header)
+	-k, --key=	Set key field (defaults to no key)
+	--extract-domain	Creates new column named Domain with
+	domain from extracted from field named 'email'
+	--convert-dates		Attempt to make date fields SQL-friendly
 """
 
-__author__ = "Eli Dickinson (eli-at-elidickinson-com)"
-__version__ = "0.1"
+__author__ = "Eli Dickinson (eli%selidickinson.com)" % "@"
+__version__ = "0.2"
 
 import csv, sys, getopt, re, os, string, time
+from datetime import datetime
+
 
 def printUsage():
 	printError(__doc__)
@@ -25,14 +37,25 @@ def printError(message):
 
 
 def createTable(header):
-	global tableName, verboseMode, keyField
-	fieldNames = [] # not yet used
+	global tableName, verboseMode, keyField, addDomain
+	fieldNames = []
+	unknownCounter = 1
 	retval = "\nDROP TABLE IF EXISTS `%s`;" % tableName
 	retval += "\nCREATE TABLE `%s` (\n" % tableName
 	fieldDefs = []
 	for field in header:
 		fieldName = re.sub("[^a-zA-Z0-9_]+","_",field).strip("_").lower()
+		
+		# dirty special case hack: remove Subscribe To
+		fieldName = re.sub("^subscribe_to_","",fieldName)
+		
+		# make sure names are not blank
+		if fieldName == '':
+			fieldName = 'unknown%d' % unknownCounter
+			unknownCounter += 1
+		
 		fieldNames.append(fieldName)
+		
 		if fieldName == 'email': # special case hack
 			collation = "COLLATE NOCASE"
 		else:
@@ -42,42 +65,64 @@ def createTable(header):
 		else:
 			keyOptions = ""
 		fieldDefs.append("`%s` TEXT %s %s" % (fieldName, collation, keyOptions))
+	if addDomain:
+		fieldDefs.append("`domain` TEXT COLLATE NOCASE")
 	retval += ",\n".join(fieldDefs) # string.join(fieldDefs, ",")
 	retval += "\n);\n\n"
 	return retval
 
 def insertRow(row):
-	global tableName
+	global tableName, convertDates
+	if convertDates:
+		for index,x in enumerate(row):
+			if re.match("^\d+/\d+/\d+ \d+:\d+ (am|AM|pm|PM)$", x):
+				try:
+					dt = datetime.strptime(x, '%m/%d/%Y %I:%M %p')
+					row[index] = dt.strftime('%Y-%m-%d %H:%M')
+				except ValueError:
+					printVerbose("Unable to convert %s to date" % x)
+	if addDomain:
+		# TODO assumes email is first
+		email = row[0]
+		domain = re.sub('^[^@]+@','',email)
+		#domain = 'foo'
+		row.append(domain)
 	row = ["'%s'" % x.replace("'","''") for x in row]
 	values = ",".join(row)
 	retval = "INSERT INTO `%s` VALUES (%s);" % (tableName,values)
 	return retval
 
 def main(argv):
-	global tableName, verboseMode, keyField
+	global tableName, verboseMode, keyField, convertDates, addDomain
 	tableName = None
 	keyField = None # TODO: allow numeric value to specify column by number
 	verboseMode = True # default on
+	convertDates = False
+	addDomain = False
 	header = None
 	skipRows = 0
 	ignoreColumns = None
 	tableExists = False
 
 	try:
-		opts, args = getopt.getopt(argv, "h:t:k:vq",  \
-			["help", "verbose", "quiet", "header=", "tablename=", "output=", "key=", "skip=", "ignore=", "tableexists"])
+		opts, args = getopt.getopt(argv, "?h:t:k:vq",  \
+			["help", "verbose", "quiet", "extract-domain", "convert-dates", "header=", "table-name=", "tablename=", "version",\
+			"output=", "key=", "skip=", "ignore=", "table-exists"])
 	except getopt.GetoptError:
-		printError("Invalid argument error")
+		printError("ERROR: Invalid argument")
 		printUsage()
 		sys.exit(2)
 	
 	for opt, arg in opts:
-		if opt == "--help":
+		if opt in ("--help","-?"):
 			printUsage()
+			sys.exit()
+		elif opt in ("--version"):
+			print "csv2sql.py by %s, Version: %s " % (__author__,__version__)
 			sys.exit()
 		elif opt in ("-h", "--header"):
 			header = arg.split(",")
-		elif opt in ("-t", "--tablename"):
+		elif opt in ("-t", "--tablename","--table-name"):
 			tableName = arg
 		elif opt in ("-v", "--verbose"):
 			verboseMode = True
@@ -89,8 +134,12 @@ def main(argv):
 			skipRows = int(arg)
 		elif opt in ("--ignore"):
 			ignoreColumns = arg.split(",")
-		elif opt in ("--tableexists"):
+		elif opt in ("--tableexists", "--table-exists"):
 			tableExists = True
+		elif opt in ("--extract-domain"):
+			addDomain = True
+		elif opt in ("--convert-dates"):
+			convertDates = True
 
 	# print args
 	if len(args) != 1:
@@ -111,7 +160,7 @@ def main(argv):
 		tableName = re.sub('[^a-z0-9_]+','_',tableName)
 	
 	# sniff dialect of csv 
-	input_chunk = input.read(1024)
+	input_chunk = input.read(4096)
 	try:
 		dialect = csv.Sniffer().sniff(input_chunk)
 	except csv.Error:
@@ -128,6 +177,13 @@ def main(argv):
 	# reset input file back to beginning
 	input.seek(0)
 	#c = csv.DictReader(input,dialect = dialect)
+	# import pprint
+	# pprint.pprint(dialect)
+	# if(type(dialect) == type(""))
+	# 	printVerbose("Column delimiter is: " % dialect)
+	# elif(dialect.delimiter == "\t")
+	# 	printVerbose("Column delimiter is: " % dialect)
+	printVerbose("CSV Delimiter is: %s" % (dialect if type(dialect) == type("") else dialect.delimiter))
 	c = csv.reader(input,dialect = dialect)
 	if header == None:
 		header = c.next()
