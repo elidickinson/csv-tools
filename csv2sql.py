@@ -12,10 +12,12 @@ USAGE: csv2sql.py [options] input.csv
 	--extract-domain	Creates new column named Domain with
 	domain from extracted from field named 'email'
 	--convert-dates		Attempt to make date fields SQL-friendly
+	--mysql
+	--sqlite (default)
 """
 
 __author__ = "Eli Dickinson (eli%selidickinson.com)" % "@"
-__version__ = "0.2"
+__version__ = "0.3"
 
 import csv, sys, getopt, re, os, string, time
 from datetime import datetime
@@ -37,7 +39,7 @@ def printError(message):
 
 
 def createTable(header):
-	global tableName, verboseMode, keyField, addDomain
+	global tableName, verboseMode, keyField, addDomain, dbType
 	fieldNames = []
 	unknownCounter = 1
 	retval = "\nDROP TABLE IF EXISTS `%s`;" % tableName
@@ -47,11 +49,13 @@ def createTable(header):
 		fieldName = re.sub("[^a-zA-Z0-9_]+","_",field).strip("_").lower()
 		
 		# dirty special case hack: remove Subscribe To
-		fieldName = re.sub("^subscribe_to_","",fieldName)
+		# fieldName = re.sub("^subscribe_to_","",fieldName)
 		
 		# make sure names are not blank
 		if fieldName == '':
-			fieldName = 'unknown%d' % unknownCounter
+			fieldName = 'unknown'
+		if fieldName in fieldNames:
+			fieldName += str(unknownCounter)
 			unknownCounter += 1
 		
 		fieldNames.append(fieldName)
@@ -64,12 +68,20 @@ def createTable(header):
 			keyOptions = "PRIMARY KEY"
 		else:
 			keyOptions = ""
-		fieldDefs.append("`%s` TEXT %s %s" % (fieldName, collation, keyOptions))
+		
+		if dbType == "sqlite":
+			fieldDefs.append("`%s` TEXT %s %s" % (fieldName, collation, keyOptions))
+		elif dbType == "mysql":
+			fieldDefs.append("`%s` VARCHAR(255)" % (fieldName))
 	if addDomain:
 		fieldDefs.append("`domain` TEXT COLLATE NOCASE")
 	retval += ",\n".join(fieldDefs) # string.join(fieldDefs, ",")
+	if keyField and dbType == "mysql":
+		retval += ",\nPRIMARY KEY (`%s`)" % keyField
 	retval += "\n);\n\n"
 	return retval
+
+
 
 def insertRow(row):
 	global tableName, convertDates
@@ -81,7 +93,7 @@ def insertRow(row):
 					row[index] = dt.strftime('%Y-%m-%d %H:%M')
 				except ValueError:
 					printVerbose("Unable to convert %s to date" % x)
-	if addDomain:
+	if addDomain and len(row) > 1:
 		# TODO assumes email is first
 		email = row[0]
 		domain = re.sub('^[^@]+@','',email)
@@ -93,7 +105,8 @@ def insertRow(row):
 	return retval
 
 def main(argv):
-	global tableName, verboseMode, keyField, convertDates, addDomain
+	global tableName, verboseMode, keyField, convertDates, addDomain, csvMode, dbType
+	csvMode = None
 	tableName = None
 	keyField = None # TODO: allow numeric value to specify column by number
 	verboseMode = True # default on
@@ -103,11 +116,12 @@ def main(argv):
 	skipRows = 0
 	ignoreColumns = None
 	tableExists = False
+	dbType = "sqlite"
 
 	try:
 		opts, args = getopt.getopt(argv, "?h:t:k:vq",  \
 			["help", "verbose", "quiet", "extract-domain", "convert-dates", "header=", "table-name=", "tablename=", "version",\
-			"output=", "key=", "skip=", "ignore=", "table-exists"])
+			"output=", "key=", "skip=", "ignore=", "table-exists", "force-csv", "mysql","sqlite"])
 	except getopt.GetoptError:
 		printError("ERROR: Invalid argument")
 		printUsage()
@@ -120,6 +134,8 @@ def main(argv):
 		elif opt in ("--version"):
 			print "csv2sql.py by %s, Version: %s " % (__author__,__version__)
 			sys.exit()
+		elif opt in ("--force-csv"):
+			csvMode = 'excel'
 		elif opt in ("-h", "--header"):
 			header = arg.split(",")
 		elif opt in ("-t", "--tablename","--table-name"):
@@ -140,6 +156,8 @@ def main(argv):
 			addDomain = True
 		elif opt in ("--convert-dates"):
 			convertDates = True
+		elif opt in ("--mysql"):
+			dbType = "mysql"
 
 	# print args
 	if len(args) != 1:
@@ -159,20 +177,23 @@ def main(argv):
 		tableName = re.sub('\..*$','',tableName)
 		tableName = re.sub('[^a-z0-9_]+','_',tableName)
 	
-	# sniff dialect of csv 
-	input_chunk = input.read(4096)
-	try:
-		dialect = csv.Sniffer().sniff(input_chunk)
-	except csv.Error:
-		printVerbose("Unable to sniff CSV dialect")
-		commas = input_chunk.count(",")
-		tabs = input_chunk.count("	")
-		if(commas > tabs):
-			dialect = "excel"
-			printVerbose("Guessing Excel CSV")
-		elif(tabs > commas):
-			dialect = "excel-tab"
-			printVerbose("Guessing Excel TSV")
+	if csvMode == None:
+		# sniff dialect of csv 
+		input_chunk = input.read(4096)
+		try:
+			dialect = csv.Sniffer().sniff(input_chunk)
+		except csv.Error:
+			printVerbose("Unable to sniff CSV dialect")
+			commas = input_chunk.count(",")
+			tabs = input_chunk.count("	")
+			if(commas >= tabs):
+				dialect = "excel"
+				printVerbose("Guessing Excel CSV")
+			elif(tabs > commas):
+				dialect = "excel-tab"
+				printVerbose("Guessing Excel TSV")
+	else:
+		dialect = csvMode
 
 	# reset input file back to beginning
 	input.seek(0)
@@ -192,7 +213,10 @@ def main(argv):
 	printVerbose("Using header row: %s" % header)
 	if not tableExists:
 		print createTable(header)
-	print "\nbegin;\n"
+	if dbType == "mysql":
+		print "\START TRANSACTION;\n"
+	elif dbType == "sqlite":
+		print "\nbegin;\n"
 	for row in c:
 		print insertRow(row)
 	print "\ncommit;\n"
