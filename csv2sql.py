@@ -170,7 +170,7 @@ def main(argv):
 		% (os.path.basename(input_filename), os.path.getsize(input_filename), time.ctime(os.path.getmtime(input_filename))) )
 	printVerbose("Skipping %d row(s)" % skipRows)
 	
-	input = file(input_filename,'r')
+	input = file(input_filename,'rU')
 	if tableName == None:
 		tableName = os.path.basename(input_filename)
 		tableName = tableName.lower()
