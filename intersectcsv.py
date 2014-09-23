@@ -15,27 +15,41 @@ def printError(message):
     except UnicodeEncodeError:
         sys.stderr.write(message.encode("utf8"))
 
+def clean_header(header):
+    cleaned = header.replace('_','').replace(' ','').replace('[','').replace(']','').lower()
+    if cleaned in ('emailaddress',):
+        cleaned = 'email'
+    return cleaned
+
+def clean_headers(headers):
+    return [clean_header(h) for h in headers]
+
 def file_to_dict(fname):
     with open(fname,'rb') as f:
         csv1 = csv.reader(f,dialect=CSV_DIALECT)
         header_row = csv1.next()
+        header_row = clean_headers(header_row)
+        # import ipdb;ipdb.set_trace()
         data_key_field = header_row[0]
-        data_fields.update(header_row)
+        # data_fields.update(header_row)
+        data_fields.add(header_row[0])
         for row in csv1:
             row_dict = OrderedDict(zip(header_row,row))
             key_field = header_row[0]
             key_value = row[0]
-            data[key_value] = row_dict
+            # data[key_value] = row_dict
+            data[key_value] = {}
 
 def update_dict(fname):
     with open(fname,'rb') as f:
         c = csv.reader(f,dialect=CSV_DIALECT)
         header_row = c.next()
+        header_row = clean_headers(header_row)
         data_fields.update(header_row)
         for row in c:
             row_dict = OrderedDict(zip(header_row,row))
-            key_field = header_row[0]
-            key_value = row[0]
+            key_field = 'email'
+            key_value = row_dict[key_field]
             if data.has_key(key_value):
                 data[key_value] = dict(data[key_value].items() + row_dict.items())
 
