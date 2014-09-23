@@ -47,19 +47,19 @@ def createTable(header):
 	fieldDefs = []
 	for field in header:
 		fieldName = re.sub("[^a-zA-Z0-9_]+","_",field).strip("_").lower()
-		
+
 		# dirty special case hack: remove Subscribe To
 		# fieldName = re.sub("^subscribe_to_","",fieldName)
-		
+
 		# make sure names are not blank
 		if fieldName == '':
 			fieldName = 'unknown'
 		if fieldName in fieldNames:
 			fieldName += str(unknownCounter)
 			unknownCounter += 1
-		
+
 		fieldNames.append(fieldName)
-		
+
 		if fieldName == 'email': # special case hack
 			collation = "COLLATE NOCASE"
 		else:
@@ -68,7 +68,7 @@ def createTable(header):
 			keyOptions = "PRIMARY KEY"
 		else:
 			keyOptions = ""
-		
+
 		if dbType == "sqlite":
 			fieldDefs.append("`%s` TEXT %s %s" % (fieldName, collation, keyOptions))
 		elif dbType == "mysql":
@@ -101,7 +101,10 @@ def insertRow(row):
 		row.append(domain)
 	row = ["'%s'" % x.replace("'","''") for x in row]
 	values = ",".join(row)
-	retval = "INSERT INTO `%s` VALUES (%s);" % (tableName,values)
+	if row:
+		retval = "INSERT INTO `%s` VALUES (%s);" % (tableName,values)
+	else:
+		return ""
 	return retval
 
 def main(argv):
@@ -126,7 +129,7 @@ def main(argv):
 		printError("ERROR: Invalid argument")
 		printUsage()
 		sys.exit(2)
-	
+
 	for opt, arg in opts:
 		if opt in ("--help","-?"):
 			printUsage()
@@ -164,21 +167,21 @@ def main(argv):
 		printUsage()
 		return 1
 	input_filename = args[0]
-	
+
 	printVerbose("csv2sql.py - Version %s - Run date: %s" % (__version__, time.ctime()) )
 	printVerbose("Source file: %s - %d bytes - Stamped %s" \
 		% (os.path.basename(input_filename), os.path.getsize(input_filename), time.ctime(os.path.getmtime(input_filename))) )
 	printVerbose("Skipping %d row(s)" % skipRows)
-	
+
 	input = file(input_filename,'rU')
 	if tableName == None:
 		tableName = os.path.basename(input_filename)
 		tableName = tableName.lower()
 		tableName = re.sub('\..*$','',tableName)
 		tableName = re.sub('[^a-z0-9_]+','_',tableName)
-	
+
 	if csvMode == None:
-		# sniff dialect of csv 
+		# sniff dialect of csv
 		input_chunk = input.read(4096)
 		try:
 			dialect = csv.Sniffer().sniff(input_chunk)
