@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 """---------------------------------------------
 USAGE: csv2sql.py [options] input.csv
 	-v, --verbose	Verbose mode. Adds extra comments to SQL
@@ -14,6 +14,7 @@ USAGE: csv2sql.py [options] input.csv
 	--convert-dates		Attempt to make date fields SQL-friendly
 	--mysql
 	--sqlite (default)
+	--trim
 """
 
 __author__ = "Eli Dickinson (eli%selidickinson.com)" % "@"
@@ -29,7 +30,7 @@ def printUsage():
 def printVerbose(msg):
 	global verboseMode
 	if verboseMode:
-		print "-- " + str(msg)
+		print("-- %s " % str(msg))
 
 def printError(message):
 	try:
@@ -39,7 +40,7 @@ def printError(message):
 
 
 def createTable(header):
-	global tableName, verboseMode, keyField, addDomain, dbType
+	global tableName, verboseMode, keyField, addDomain, dbType, addHash
 	fieldNames = []
 	unknownCounter = 1
 	retval = "\nDROP TABLE IF EXISTS `%s`;" % tableName
@@ -75,6 +76,8 @@ def createTable(header):
 			fieldDefs.append("`%s` VARCHAR(255)" % (fieldName))
 	if addDomain:
 		fieldDefs.append("`domain` TEXT COLLATE NOCASE")
+	if addHash:
+		fieldDefs.append("`email_hash` TEXT COLLATE NOCASE")
 	retval += ",\n".join(fieldDefs) # string.join(fieldDefs, ",")
 	if keyField and dbType == "mysql":
 		retval += ",\nPRIMARY KEY (`%s`)" % keyField
@@ -84,7 +87,9 @@ def createTable(header):
 
 
 def insertRow(row):
-	global tableName, convertDates
+	global tableName, convertDates, trimValues, addHash
+	if trimValues:
+		row = [x.strip() for x in row]
 	if convertDates:
 		for index,x in enumerate(row):
 			if re.match("^\d+/\d+/\d+ \d+:\d+ (am|AM|pm|PM)$", x):
@@ -93,12 +98,24 @@ def insertRow(row):
 					row[index] = dt.strftime('%Y-%m-%d %H:%M')
 				except ValueError:
 					printVerbose("Unable to convert %s to date" % x)
+			elif re.match("^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2}$", x):
+				# e.g. 2016/10/04 16:44:42
+				try:
+					dt = datetime.strptime(x, '%Y/%m/%d %H:%M:%S')
+					row[index] = dt.strftime('%Y-%m-%d %H:%M:%S')
+				except ValueError:
+					printVerbose("Unable to convert %s to date" % x)
 	if addDomain and len(row) > 1:
 		# TODO assumes email is first
 		email = row[0]
 		domain = re.sub('^[^@]+@','',email)
 		#domain = 'foo'
 		row.append(domain)
+	if addHash and len(row) > 1:
+		email = row[0]
+		import md5
+		row.append(md5.new(email).hexdigest())
+
 	row = ["'%s'" % x.replace("'","''") for x in row]
 	values = ",".join(row)
 	if row:
@@ -108,7 +125,7 @@ def insertRow(row):
 	return retval
 
 def main(argv):
-	global tableName, verboseMode, keyField, convertDates, addDomain, csvMode, dbType
+	global tableName, verboseMode, keyField, convertDates, addDomain, csvMode, dbType, trimValues, addHash
 	csvMode = None
 	tableName = None
 	keyField = None # TODO: allow numeric value to specify column by number
@@ -120,11 +137,13 @@ def main(argv):
 	ignoreColumns = None
 	tableExists = False
 	dbType = "sqlite"
+	trimValues = False
+	addHash = False
 
 	try:
 		opts, args = getopt.getopt(argv, "?h:t:k:vq",  \
 			["help", "verbose", "quiet", "extract-domain", "convert-dates", "header=", "table-name=", "tablename=", "version",\
-			"output=", "key=", "skip=", "ignore=", "table-exists", "force-csv", "mysql","sqlite"])
+			"output=", "key=", "skip=", "ignore=", "table-exists", "force-csv", "mysql","sqlite","trim","addhash","add-hash"])
 	except getopt.GetoptError:
 		printError("ERROR: Invalid argument")
 		printUsage()
@@ -135,9 +154,9 @@ def main(argv):
 			printUsage()
 			sys.exit()
 		elif opt in ("--version"):
-			print "csv2sql.py by %s, Version: %s " % (__author__,__version__)
+			print("csv2sql.py by %s, Version: %s " % (__author__,__version__))
 			sys.exit()
-		elif opt in ("--force-csv"):
+		elif opt in ("--force-csv","--csv"):
 			csvMode = 'excel'
 		elif opt in ("-h", "--header"):
 			header = arg.split(",")
@@ -159,8 +178,12 @@ def main(argv):
 			addDomain = True
 		elif opt in ("--convert-dates"):
 			convertDates = True
+		elif opt in ("--trim"):
+			trimValues = True
 		elif opt in ("--mysql"):
 			dbType = "mysql"
+		elif opt in ("--addhash","--add-hash"):
+			addHash = True
 
 	# print args
 	if len(args) != 1:
@@ -208,7 +231,7 @@ def main(argv):
 	# elif(dialect.delimiter == "\t")
 	# 	printVerbose("Column delimiter is: " % dialect)
 	printVerbose("CSV Delimiter is: %s" % (dialect if type(dialect) == type("") else dialect.delimiter))
-	c = csv.reader(input,dialect = dialect)
+	c = csv.reader(input,dialect = dialect, doublequote=True)
 	if header == None:
 		header = c.next()
 	for i in range(skipRows):
