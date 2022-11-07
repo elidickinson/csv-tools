@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 """---------------------------------------------
 USAGE: csv2sql.py [options] input.csv
     -v, --verbose   Verbose mode. Adds extra comments to SQL
@@ -18,7 +18,7 @@ USAGE: csv2sql.py [options] input.csv
 """
 
 __author__ = "Eli Dickinson (eli%selidickinson.com)" % "@"
-__version__ = "0.3"
+__version__ = "0.4"
 
 import csv, sys, getopt, re, os, string, time
 from datetime import datetime
@@ -107,14 +107,14 @@ def insertRow(row):
                     printVerbose("Unable to convert %s to date" % x)
     if addDomain and len(row) > 1:
         # TODO assumes email is first
-        email = row[0]
+        email = row[1]
         domain = re.sub('^[^@]+@','',email)
         #domain = 'foo'
         row.append(domain)
     if addHash and len(row) > 1:
         email = row[0]
-        import md5
-        row.append(md5.new(email).hexdigest())
+        from hashlib import md5
+        row.append(md5(email.encode('utf-8')).hexdigest())
 
     row = ["'%s'" % x.replace("'","''") for x in row]
     values = ",".join(row)
@@ -196,7 +196,7 @@ def main(argv):
         % (os.path.basename(input_filename), os.path.getsize(input_filename), time.ctime(os.path.getmtime(input_filename))) )
     printVerbose("Skipping %d row(s)" % skipRows)
 
-    input = file(input_filename,'rU')
+    input = open(input_filename,'rU')
     if tableName == None:
         tableName = os.path.basename(input_filename)
         tableName = tableName.lower()
@@ -233,19 +233,19 @@ def main(argv):
     printVerbose("CSV Delimiter is: %s" % (dialect if type(dialect) == type("") else dialect.delimiter))
     c = csv.reader(input,dialect = dialect, doublequote=True)
     if header == None:
-        header = c.next()
+        header = next(c)
     for i in range(skipRows):
-        c.next()
+        next(c)
     printVerbose("Using header row: %s" % header)
     if not tableExists:
-        print createTable(header)
+        print (createTable(header))
     if dbType == "mysql":
-        print "\START TRANSACTION;\n"
+        print ("\START TRANSACTION;\n")
     elif dbType == "sqlite":
-        print "\nbegin;\n"
+        print ("\nbegin;\n")
     for row in c:
-        print insertRow(row)
-    print "\ncommit;\n"
+        print (insertRow(row))
+    print ("\ncommit;\n")
     input.close()
     return 0
 
